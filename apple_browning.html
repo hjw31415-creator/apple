@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>사과 갈변 분석기</title>
+<style>
+:root{--bg:#fafaf7;--fg:#1f2421;--mut:#69706b;--card:#ffffff;--bd:#dcdfd8;--ac:#2f7d4f;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15181a;--fg:#e8ebe6;--mut:#9aa39c;--card:#1e2224;--bd:#343a3c;--ac:#6cc58c}}
+:root[data-theme="dark"]{--bg:#15181a;--fg:#e8ebe6;--mut:#9aa39c;--card:#1e2224;--bd:#343a3c;--ac:#6cc58c}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 -apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.6rem;margin:0 0 4px}
+.sub{color:var(--mut);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px}
+label{display:block;font-weight:600;margin:0 0 4px}
+.hint{color:var(--mut);font-size:.88rem;font-weight:400}
+input[type=file]{width:100%;max-width:100%;margin-bottom:12px;color:var(--fg)}
+details{margin-top:4px}summary{cursor:pointer;color:var(--ac);font-weight:600}
+.set{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px}
+.set input{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg);font-size:1rem}
+.imgs{display:flex;flex-wrap:wrap;gap:14px}
+.imgs figure{margin:0;flex:1 1 300px;min-width:0}
+.imgs canvas{width:100%;height:auto;border-radius:10px;border:1px solid var(--bd);display:block}
+figcaption{color:var(--mut);font-size:.9rem;margin-top:4px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:.9rem}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.verdict{font-size:1.35rem;font-weight:700;margin:2px 0 10px}
+.big{display:flex;flex-wrap:wrap;gap:10px 28px;margin-bottom:12px}
+.big div{min-width:110px}.big b{display:block;font-size:1.5rem}.big span{color:var(--mut);font-size:.85rem}
+.bar{display:flex;align-items:center;gap:10px;margin:5px 0}
+.bar .n{width:5.5rem;font-size:.92rem}
+.bar .t{flex:1;height:14px;background:var(--bd);border-radius:7px;overflow:hidden}
+.bar .t u{display:block;height:100%}
+.bar .p{width:3.6rem;text-align:right;font-variant-numeric:tabular-nums;font-size:.92rem}
+table{width:100%;border-collapse:collapse;font-size:.93rem}
+td{padding:5px 4px;border-top:1px solid var(--bd)}td:first-child{color:var(--mut)}
+.sw{display:inline-block;width:14px;height:14px;border-radius:4px;border:1px solid var(--bd);vertical-align:-2px;margin-right:6px}
+.msg{color:#c0392b;font-weight:600}
+.note{color:var(--mut);font-size:.85rem}
+</style>
+</head>
+<body>
+<main>
+<h1>🍎 사과 갈변 분석기</h1>
+<p class="sub">사과 단면 사진을 올리면 픽셀마다 RGB를 L*a*b* 색으로 바꿔 신선한 속살 색과 비교하고, 갈변 정도를 계산합니다.</p>
+
+<div class="card">
+  <label for="f">분석할 사과 사진</label>
+  <input type="file" id="f" accept="image/*">
+  <label for="r">갈변 전(신선한) 사과 사진 <span class="hint">- 선택, 있으면 더 정확해요</span></label>
+  <input type="file" id="r" accept="image/*">
+  <details>
+    <summary>고급 설정 (배경이 잘못 잡힐 때)</summary>
+    <div class="set">
+      <div><label for="minC" class="hint">최소 채도 (흰/회색 배경 제외)</label><input type="number" id="minC" value="8" step="1" min="0" max="40"></div>
+      <div><label for="minL" class="hint">최소 밝기 L* (그림자 제외)</label><input type="number" id="minL" value="25" step="1" min="0" max="80"></div>
+      <div><label for="maxA" class="hint">최대 a* (빨간 껍질 제외)</label><input type="number" id="maxA" value="22" step="1" min="0" max="60"></div>
+    </div>
+  </details>
+  <p class="note" style="margin:10px 0 0">사진은 서버로 보내지 않고 이 기기의 브라우저 안에서만 분석됩니다. 흰색·회색 단색 배경에 같은 조명으로 찍은 단면 사진이 가장 잘 맞아요.</p>
+</div>
+
+<div id="msg" class="msg"></div>
+<div id="out" hidden>
+  <div class="card">
+    <div class="imgs">
+      <figure><canvas id="c0"></canvas><figcaption>원본</figcaption></figure>
+      <figure><canvas id="c1"></canvas><figcaption>갈변 분포 지도</figcaption></figure>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+  <div class="card" id="res"></div>
+</div>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+const LV=[[60,180,75],[250,220,60],[245,140,30],[200,30,30]];
+const NAMES=['신선','약한 갈변','중간 갈변','심한 갈변'];
+const S={img:null,ref:null};
+
+const lut=new Float32Array(256);
+for(let i=0;i<256;i++){const c=i/255;lut[i]=c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4)}
+const ff=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;
+function lab(r,g,b){
+  const R=lut[r],G=lut[g],B=lut[b];
+  const X=(0.4124564*R+0.3575761*G+0.1804375*B)/0.95047;
+  const Y=0.2126729*R+0.7151522*G+0.0721750*B;
+  const Z=(0.0193339*R+0.1191920*G+0.9503041*B)/1.08883;
+  const fx=ff(X),fy=ff(Y),fz=ff(Z);
+  return [116*fy-16,500*(fx-fy),200*(fy-fz)];
+}
+const bi=(L,a,b)=>{const x=(a+1.75*L)/(5.645*L+a-3.012*b);return 100*(x-0.31)/0.17};
+const cfg=()=>({minL:+$('#minL').value,minC:+$('#minC').value,maxA:+$('#maxA').value});
+const isFlesh=(l,c)=>l[0]>=c.minL&&Math.hypot(l[1],l[2])>=c.minC&&l[1]<=c.maxA;
+
+function load(file){
+  return new Promise((ok,no)=>{
+    const u=URL.createObjectURL(file),im=new Image();
+    im.onload=()=>{
+      const s=Math.min(1,900/Math.max(im.naturalWidth,im.naturalHeight));
+      const w=Math.round(im.naturalWidth*s),h=Math.round(im.naturalHeight*s);
+      const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      const x=cv.getContext('2d',{willReadFrequently:true});
+      x.drawImage(im,0,0,w,h);URL.revokeObjectURL(u);
+      ok(x.getImageData(0,0,w,h));
+    };
+    im.onerror=()=>no(new Error('load'));
+    im.src=u;
+  });
+}
+
+function meanFlesh(img,c){
+  const d=img.data,n=img.width*img.height;
+  let v=0,L=0,a=0,b=0,r=0,g=0,bl=0;
+  for(let i=0;i<n;i++){
+    const p=i*4,l=lab(d[p],d[p+1],d[p+2]);
+    if(!isFlesh(l,c))continue;
+    v++;L+=l[0];a+=l[1];b+=l[2];r+=d[p];g+=d[p+1];bl+=d[p+2];
+  }
+  return v?{lab:[L/v,a/v,b/v],rgb:[r/v,g/v,bl/v]}:null;
+}
+
+function run(){
+  if(!S.img)return;
+  $('#msg').textContent='';
+  const c=cfg();
+  let ref={lab:[85,-1,18],rgb:null};
+  if(S.ref){
+    const m=meanFlesh(S.ref,c);
+    if(!m){$('#msg').textContent='기준 사진에서 사과 속살을 찾지 못했어요. 고급 설정을 조절해 보세요.';return}
+    ref=m;
+  }
+  const {data,width:w,height:h}=S.img,n=w*h;
+  const out=new ImageData(w,h),o=out.data;
+  const cnt=[0,0,0,0];
+  let v=0,sL=0,sa=0,sb=0,sr=0,sg=0,sbl=0,sbi=0,sn=0;
+  for(let i=0;i<n;i++){
+    const p=i*4,r=data[p],g=data[p+1],b=data[p+2],l=lab(r,g,b);
+    o[p+3]=255;
+    if(!isFlesh(l,c)){o[p]=r>>2;o[p+1]=g>>2;o[p+2]=b>>2;continue}
+    const dL=Math.max(0,ref.lab[0]-l[0]),da=Math.max(0,l[1]-ref.lab[1]),db=Math.max(0,l[2]-ref.lab[2]);
+    const s=Math.hypot(dL,da,db);
+    const lv=s<8?0:s<16?1:s<28?2:3;
+    cnt[lv]++;v++;
+    sL+=l[0];sa+=l[1];sb+=l[2];sr+=r;sg+=g;sbl+=b;
+    sbi+=bi(l[0],l[1],l[2]);sn+=Math.min(1,s/40);
+    o[p]=.45*r+.55*LV[lv][0];o[p+1]=.45*g+.55*LV[lv][1];o[p+2]=.45*b+.55*LV[lv][2];
+  }
+  const c0=$('#c0'),c1=$('#c1');
+  c0.width=c1.width=w;c0.height=c1.height=h;
+  c0.getContext('2d').putImageData(S.img,0,0);
+  c1.getContext('2d').putImageData(out,0,0);
+  $('#out').hidden=false;
+  if(!v){
+    $('#res').innerHTML='<p class="msg">사과 속살 픽셀을 찾지 못했어요. 배경과 조명을 확인하거나 고급 설정 값을 조절해 보세요.</p>';
+    return;
+  }
+  const m=[sL/v,sa/v,sb/v],mrgb=[sr/v,sg/v,sbl/v];
+  const idx=100*sn/v,area=100*(cnt[1]+cnt[2]+cnt[3])/v;
+  const verdict=idx<10?'거의 갈변 없음 (신선)':idx<25?'약한 갈변':idx<45?'중간 정도 갈변':'심한 갈변';
+  const rgbs=a=>'rgb('+a.map(Math.round).join(',')+')';
+  const f1=x=>x.toFixed(1),sg1=x=>(x>=0?'+':'')+x.toFixed(1);
+  $('#legend').innerHTML=NAMES.map((t,i)=>'<span><i style="background:rgb('+LV[i]+')"></i>'+t+'</span>').join('')+'<span><i style="background:#333"></i>분석 제외</span>';
+  $('#res').innerHTML=
+    '<div class="verdict">'+verdict+'</div>'+
+    '<div class="big"><div><b>'+f1(idx)+'</b><span>갈변 지수 (0~100)</span></div>'+
+    '<div><b>'+f1(area)+'%</b><span>갈변 면적 비율</span></div>'+
+    '<div><b>'+f1(100*v/n)+'%</b><span>분석 대상 픽셀 비율</span></div></div>'+
+    cnt.map((k,i)=>'<div class="bar"><span class="n">'+NAMES[i]+'</span><span class="t"><u style="width:'+(100*k/v)+'%;background:rgb('+LV[i]+')"></u></span><span class="p">'+f1(100*k/v)+'%</span></div>').join('')+
+    '<table style="margin-top:12px">'+
+    '<tr><td>평균 RGB</td><td><span class="sw" style="background:'+rgbs(mrgb)+'"></span>('+mrgb.map(Math.round).join(', ')+')'+
+      (ref.rgb?' &nbsp;기준 <span class="sw" style="background:'+rgbs(ref.rgb)+'"></span>('+ref.rgb.map(Math.round).join(', ')+')':'')+'</td></tr>'+
+    '<tr><td>평균 L*a*b*</td><td>('+m.map(f1).join(', ')+') &nbsp;기준 ('+ref.lab.map(f1).join(', ')+')</td></tr>'+
+    '<tr><td>명도 변화 dL*</td><td>'+sg1(m[0]-ref.lab[0])+' (음수일수록 어두워짐)</td></tr>'+
+    '<tr><td>적색도·황색도 변화</td><td>da* '+sg1(m[1]-ref.lab[1])+', db* '+sg1(m[2]-ref.lab[2])+'</td></tr>'+
+    '<tr><td>갈변 지수 BI</td><td>평균 '+f1(sbi/v)+' (기준 '+f1(bi(...ref.lab))+', 변화 '+sg1(sbi/v-bi(...ref.lab))+')</td></tr></table>'+
+    '<p class="note">기준 사진이 없으면 일반적인 신선한 사과 속살 색 L*a*b*(85, -1, 18)을 기준으로 삼습니다.</p>';
+}
+
+async function pick(el,key){
+  const file=el.files[0];
+  if(!file){S[key]=null;run();return}
+  try{S[key]=await load(file);run()}
+  catch(e){$('#msg').textContent='사진을 열 수 없어요. JPG나 PNG 파일인지 확인해 주세요.'}
+}
+$('#f').addEventListener('change',e=>pick(e.target,'img'));
+$('#r').addEventListener('change',e=>pick(e.target,'ref'));
+['minL','minC','maxA'].forEach(id=>$('#'+id).addEventListener('input',run));
+</script>
+</body>
+</html>
